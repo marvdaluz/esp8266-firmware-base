@@ -3,18 +3,9 @@ import network
 import time
 import machine
 import gc
+import config
 
-# --- CONFIGURAÇÃO WI-FI ---
-WIFI_SSID = "Ubuntu"
-WIFI_PASS = "27734056"
-
-# --- CONFIGURAÇÃO SENKO ---
-# Substitua pelos seus dados do GitHub
-GITHUB_USER = "SEU_USUARIO_GITHUB"
-GITHUB_REPO = "NOME_DO_REPOSITORIO"
-GITHUB_BRANCH = "master"  # ou "main"
-# Lista de arquivos que serão sincronizados
-ARQUIVOS_OTA = ["boot.py", "config.py", "app.py", "main.py"]
+gc.collect()
 
 def conectar_wifi():
     wlan = network.WLAN(network.STA_IF)
@@ -22,7 +13,7 @@ def conectar_wifi():
     
     if not wlan.isconnected():
         print('Conectando ao Wi-Fi...')
-        wlan.connect(WIFI_SSID, WIFI_PASS)
+        wlan.connect(config.WIFI_SSID, config.WIFI_PASS)
         
         tentativas = 0
         while not wlan.isconnected() and tentativas < 20:
@@ -30,26 +21,29 @@ def conectar_wifi():
             tentativas += 1
             
     if wlan.isconnected():
-        print('Wi-Fi OK. IP:', wlan.ifconfig()[0])
+        print('Wi-Fi Conectado! IP:', wlan.ifconfig()[0])
         return True
     else:
-        print('Falha no Wi-Fi.')
+        print('Falha na conexão Wi-Fi.')
         return False
 
 def verificar_ota():
+    if config.GITHUB_USER == "SEU_USUARIO_GITHUB":
+        print("Aviso OTA: Atualize o GITHUB_USER no config.py com seu usuário real.")
+        return
+
     try:
+        gc.collect() # Libera RAM antes de abrir socket HTTPS
         import senko
         print("Verificando atualizações no GitHub...")
         
-        # Inicializa o objeto Senko
         ota = senko.Senko(
-            user=GITHUB_USER,
-            repo=GITHUB_REPO,
-            branch=GITHUB_BRANCH,
-            files=ARQUIVOS_OTA
+            user=config.GITHUB_USER,
+            repo=config.GITHUB_REPO,
+            branch=config.GITHUB_BRANCH,
+            files=config.ARQUIVOS_OTA
         )
         
-        # Verifica e atualiza se houver versão nova
         if ota.update():
             print("Atualização realizada! Reiniciando...")
             time.sleep(2)
@@ -59,12 +53,14 @@ def verificar_ota():
             
     except Exception as e:
         print("Erro no OTA Senko:", e)
+    finally:
+        gc.collect()
 
 # Fluxo de Inicialização
-gc.collect()
 if conectar_wifi():
     verificar_ota()
-    # Se não reiniciou, continua para o main.py
-    print("Iniciando aplicação...")
+    print("Iniciando aplicação principal...")
 else:
-    print("Iniciando sem Wi-Fi/OTA...")   
+    print("Iniciando sem Wi-Fi/OTA...")
+
+gc.collect()
