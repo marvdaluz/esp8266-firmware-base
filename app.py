@@ -1,4 +1,4 @@
-# app.py - ESP8266 NodeMCU v3
+# app.py - ESP8266 NodeMCU v3 tedte
 from umqtt.simple import MQTTClient
 from machine import Pin
 import ujson
