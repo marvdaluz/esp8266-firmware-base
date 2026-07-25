@@ -11,32 +11,27 @@ import machine
 rele = Pin(config.PIN_RELE, Pin.OUT, value=0)
 client = None
 
+# ... (imports)
+
 def enviar_descoberta(cliente):
     try:
+        # 1. Publica a configuração (Discovery)
         payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
-        cliente.publish(config.TOPICO_CONFIG, payload_json, retain=True)
-        time.sleep(0.5)
-        cliente.publish(config.TOPICO_ESTADO, "OFF", retain=True)
-        print("Home Assistant configurado.")
+        # QoS 1 garante que o broker recebeu
+        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
+        print("Payload de descoberta enviado.")
+        
+        # 2. Aguarda o broker processar
+        time.sleep(1) 
+        
+        # 3. Publica o estado inicial
+        cliente.publish(config.TOPICO_ESTADO, "OFF", qos=1, retain=True)
+        print("Estado inicial enviado. Home Assistant deve reconhecer.")
     except Exception as e:
         print("Erro na descoberta:", e)
 
-def callback_mqtt(topic, msg):
-    topico = topic.decode('utf-8')
-    mensagem = msg.decode('utf-8')
-    
-    if topico == config.TOPICO_COMANDO:
-        if mensagem == "ON":
-            rele.value(1)
-            estado = "ON"
-        else:
-            rele.value(0)
-            estado = "OFF"
-        client.publish(config.TOPICO_ESTADO, estado, retain=True)
-
 def main():
     global client
-    # Aguarda Wi-Fi estar pronto (iniciado no boot.py)
     time.sleep(2) 
     
     client = MQTTClient(config.CLIENT_ID, config.MQTT_BROKER, 
@@ -45,19 +40,27 @@ def main():
     
     try:
         client.connect()
-        enviar_descoberta(client)
+        # Pequeno delay após conectar para garantir estabilidade da rede
+        time.sleep(1) 
+        
+        # Assina primeiro para garantir que está pronto para receber comandos
         client.subscribe(config.TOPICO_COMANDO)
+        
+        # Envia a descoberta
+        enviar_descoberta(client)
+        
         print("ESP8266 Pronto! IP:", client.ifconfig()[0])
         
         while True:
             client.check_msg()
-            gc.collect() # Limpeza crítica no ESP8266
+            gc.collect()
             time.sleep(0.1)
             
     except Exception as e:
         print("Erro:", e)
         time.sleep(5)
         machine.reset()
+# ...   
 
 if __name__ == "__main__":
-    main()   
+    main()
