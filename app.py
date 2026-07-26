@@ -13,24 +13,22 @@ client = None
 
 def enviar_descoberta(cliente):
     try:
-        # 1. Prepara o payload
         payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
         
-        # 2. Publica a configuração (Discovery) com QoS 1 e Retain
-        # Se falhar, a exceção será capturada e o dispositivo reiniciará
+        # Debug: Verifica se o JSON foi gerado
+        if len(payload_json) < 10:
+            print("ERRO: Payload JSON muito curto ou inválido!")
+            return
+
+        print("Enviando Discovery:", payload_json) # Imprime no console serial
         cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
-        print(">>> Discovery enviado:", config.TOPICO_CONFIG)
         
-        # 3. Aguarda o broker processar (Crítico para ESP8266)
-        time.sleep(2) 
-        
-        # 4. Publica o estado inicial
+        time.sleep(2)
         cliente.publish(config.TOPICO_ESTADO, "OFF", qos=1, retain=True)
-        print(">>> Estado inicial enviado.")
-        
+        print("Discovery e Estado enviados com sucesso.")
     except Exception as e:
-        print("Erro crítico na descoberta:", e)
-        raise e # Propaga o erro para o main reiniciar o dispositivo
+        print("Erro fatal na descoberta:", e)
+        machine.reset()   
 
 def callback_mqtt(topic, msg):
     try:
