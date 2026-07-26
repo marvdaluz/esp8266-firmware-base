@@ -1,4 +1,4 @@
-# app.py - ESP8266 NodeMCU v3
+# app.py - ESP8266 NodeMCU v3 (Versão Corrigida)
 from umqtt.simple import MQTTClient
 from machine import Pin
 import ujson
@@ -11,7 +11,27 @@ import machine
 rele = Pin(config.PIN_RELE, Pin.OUT, value=0)
 client = None
 
-# Define a função de callback ANTES de qualquer uso
+def enviar_descoberta(cliente):
+    try:
+        # 1. Prepara o payload
+        payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
+        
+        # 2. Publica a configuração (Discovery) com QoS 1 e Retain
+        # Se falhar, a exceção será capturada e o dispositivo reiniciará
+        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
+        print(">>> Discovery enviado:", config.TOPICO_CONFIG)
+        
+        # 3. Aguarda o broker processar (Crítico para ESP8266)
+        time.sleep(2) 
+        
+        # 4. Publica o estado inicial
+        cliente.publish(config.TOPICO_ESTADO, "OFF", qos=1, retain=True)
+        print(">>> Estado inicial enviado.")
+        
+    except Exception as e:
+        print("Erro crítico na descoberta:", e)
+        raise e # Propaga o erro para o main reiniciar o dispositivo
+
 def callback_mqtt(topic, msg):
     try:
         topico = topic.decode('utf-8')
@@ -25,43 +45,45 @@ def callback_mqtt(topic, msg):
                 rele.value(0)
                 estado = "OFF"
             else:
-                return # Ignora mensagens inválidas
+                return # Ignora payloads inválidos
             
             client.publish(config.TOPICO_ESTADO, estado, retain=True)
-            print(f"Comando recebido: {estado}")
+            print(f"Comando executado: {estado}")
     except Exception as e:
         print("Erro no callback:", e)
 
-def enviar_descoberta(cliente):
-    try:
-        payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
-        # QoS 1 garante entrega
-        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
-        time.sleep(1) # Aguarda o broker processar
-        cliente.publish(config.TOPICO_ESTADO, "OFF", qos=1, retain=True)
-        print("Home Assistant configurado (Discovery enviado).")
-    except Exception as e:
-        print("Erro na descoberta:", e)
-
 def main():
     global client
-    # Aguarda Wi-Fi estar pronto
-    time.sleep(2) 
+    print("Iniciando conexão...")
+    time.sleep(2) # Aguarda Wi-Fi do boot.py estabilizar
     
     client = MQTTClient(config.CLIENT_ID, config.MQTT_BROKER, 
                         user=config.MQTT_USER, password=config.MQTT_PASS)
-    
-    # Registra o callback explicitamente
     client.set_callback(callback_mqtt)
     
+    tentativas = 0
+    while tentativas < 5:
+        try:
+            client.connect()
+            print("Conectado ao Broker MQTT.")
+            break
+        except Exception as e:
+            print(f"Falha na conexão MQTT ({tentativas}):", e)
+            time.sleep(2)
+            tentativas += 1
+    
+    if tentativas == 5:
+        print("Falha permanente no MQTT. Reiniciando...")
+        machine.reset()
+
     try:
-        client.connect()
-        time.sleep(1) # Estabiliza conexão
+        # Pequeno delay pós-conexão para garantir estabilidade do socket
+        time.sleep(1) 
         
         client.subscribe(config.TOPICO_COMANDO)
         print("Subscrito em:", config.TOPICO_COMANDO)
         
-        # Envia descoberta após subscrever
+        # Envia a descoberta APÓS subscrever e estabilizar
         enviar_descoberta(client)
         
         print("ESP8266 Pronto! IP:", client.ifconfig()[0])
@@ -72,7 +94,7 @@ def main():
             time.sleep(0.1)
             
     except Exception as e:
-        print("Erro crítico:", e)
+        print("Erro fatal no loop:", e)
         time.sleep(5)
         machine.reset()
 
