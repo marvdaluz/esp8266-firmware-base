@@ -1,4 +1,4 @@
-# app.py - ESP8266 NodeMCU v3 (Versão Blindada)
+# app.py - ESP8266 NodeMCU v3 (Correção Final de Tópicos)
 from umqtt.simple import MQTTClient
 from machine import Pin
 import ujson
@@ -7,37 +7,26 @@ import gc
 import config
 import machine
 
-# --- HARDWARE ---
 rele = Pin(config.PIN_RELE, Pin.OUT, value=0)
 client = None
 
 def enviar_descoberta(cliente):
     try:
-        # 1. Gerar JSON
         payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
         
-        # 2. Validação de Segurança
-        if not payload_json or len(payload_json) < 20:
-            print("ERRO CRÍTICO: JSON inválido ou vazio!")
-            print("Conteúdo gerado:", payload_json)
-            return
-
-        # 3. Publicar Configuração (Discovery)
-        print(">>> Enviando Discovery (Tamanho:", len(payload_json), "bytes)")
-        # QoS 1 e Retain True são obrigatórios para descoberta
+        # GARANTIA: Publicar APENAS no tópico de CONFIG
+        print(f"Publicando CONFIG em: {config.TOPICO_CONFIG}")
         cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
         
-        # 4. Aguarda o Broker processar (Essencial no ESP8266)
-        time.sleep(2) 
+        time.sleep(2) # Aguarda processamento
         
-        # 5. Publicar Estado Inicial
+        # GARANTIA: Publicar APENAS no tópico de ESTADO
+        print(f"Publicando ESTADO em: {config.TOPICO_ESTADO}")
         cliente.publish(config.TOPICO_ESTADO, "OFF", qos=1, retain=True)
-        print(">>> Discovery e Estado enviados com sucesso!")
         
+        print("Descoberta enviada corretamente.")
     except Exception as e:
-        print("Erro fatal na descoberta:", e)
-        # Reinicia se falhar para tentar novamente no próximo boot
-        time.sleep(2)
+        print("Erro na descoberta:", e)
         machine.reset()
 
 def callback_mqtt(topic, msg):
@@ -45,6 +34,7 @@ def callback_mqtt(topic, msg):
         topico = topic.decode('utf-8')
         mensagem = msg.decode('utf-8')
         
+        # Verifica EXATAMENTE o tópico de comando definido no config
         if topico == config.TOPICO_COMANDO:
             if mensagem == "ON":
                 rele.value(1)
@@ -53,46 +43,38 @@ def callback_mqtt(topic, msg):
                 rele.value(0)
                 estado = "OFF"
             else:
-                print("Comando desconhecido:", mensagem)
-                return
+                return # Ignora outros payloads
             
+            # Publica o estado APENAS no tópico de estado
             client.publish(config.TOPICO_ESTADO, estado, retain=True)
-            print(f"Comando executado: {estado}")
+            print(f"Comando: {estado} -> Publicado em {config.TOPICO_ESTADO}")
     except Exception as e:
-        print("Erro no callback:", e)
+        print("Erro callback:", e)
 
 def main():
     global client
-    print("Iniciando sistema...")
-    time.sleep(2) # Aguarda Wi-Fi do boot.py
+    time.sleep(2)
     
-    # Tenta conectar
     client = MQTTClient(config.CLIENT_ID, config.MQTT_BROKER, 
                         user=config.MQTT_USER, password=config.MQTT_PASS)
     client.set_callback(callback_mqtt)
     
     try:
         client.connect()
-        print("Conectado ao Broker MQTT.")
-        time.sleep(1) # Estabiliza socket
-        
-        # Assina o tópico de comando
+        time.sleep(1)
         client.subscribe(config.TOPICO_COMANDO)
-        print("Subscrito em:", config.TOPICO_COMANDO)
         
-        # Envia a descoberta
+        # Reenvia a descoberta a cada boot para garantir
         enviar_descoberta(client)
         
-        print("ESP8266 Pronto! IP:", client.ifconfig()[0])
+        print("Sistema Online. IP:", client.ifconfig()[0])
         
         while True:
             client.check_msg()
             gc.collect()
             time.sleep(0.1)
-            
     except Exception as e:
-        print("Erro crítico:", e)
-        time.sleep(5)
+        print("Erro:", e)
         machine.reset()
 
 if __name__ == "__main__":
