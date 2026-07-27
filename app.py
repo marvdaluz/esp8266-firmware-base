@@ -19,23 +19,17 @@ def obter_estado_rele():
 
 def enviar_descoberta(cliente):
     try:
+        gc.collect() # Garante RAM máxima livre antes de publicar
         payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
         
-        if len(payload_json) < 10:
-            print("ERRO: Payload JSON muito curto ou inválido!")
-            return
-
-        print("Enviando Auto-Discovery do Home Assistant...")
-        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=1, retain=True)
+        print("Enviando Discovery (Tamanho:", len(payload_json), "bytes)...")
+        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=0, retain=True)
         
         time.sleep(1)
-        # Envia o estado REAL do relé em vez de forçar OFF
-        estado_atual = obter_estado_rele()
-        cliente.publish(config.TOPICO_ESTADO, estado_atual, qos=1, retain=True)
-        print(f"Discovery enviado. Estado publicado: {estado_atual}")
+        cliente.publish(config.TOPICO_ESTADO, "OFF", qos=0, retain=True)
+        print("Discovery enviado!")
     except Exception as e:
-        print("Erro na descoberta:", e)
-        machine.reset()   
+        print("Erro no discovery:", e)
 
 def callback_mqtt(topic, msg):
     try:

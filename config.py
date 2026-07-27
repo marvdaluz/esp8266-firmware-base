@@ -19,20 +19,18 @@ TOPICO_CONFIG = "homeassistant/switch/esp8266_lampada_01/config"
 TOPICO_ESTADO = "casa/lampada_01/state"
 TOPICO_COMANDO = "casa/lampada_01/set"
 TOPICO_OTA = "casa/lampada/ota"
+# --- PAYLOAD MINIMALISTA ---
 CONFIG_PAYLOAD = {
-    "name": "Lampada Sala 01",
-    "unique_id": "esp8266_lampada_01_switch",
+    "name": "Lampada Sala",
+    "unique_id": "esp8266_lampada_01_sw",
     "state_topic": TOPICO_ESTADO,
     "command_topic": TOPICO_COMANDO,
     "payload_on": "ON",
     "payload_off": "OFF",
-    "qos": 1,
-    "retain": True,
     "device": {
         "identifiers": ["esp8266_lampada_01"],
-        "name": "Modulo Rele Sala",
-        "model": "NodeMCU v3",
-        "manufacturer": "Espressif",
-        "sw_version": "v1.28 OTA"
+        "name": "Rele Sala"
+    }
+}
     }
 }
