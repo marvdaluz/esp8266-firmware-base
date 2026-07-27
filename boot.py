@@ -1,7 +1,6 @@
-# boot.py - ESP8266 com Senko OTA
+# boot.py - ESP8266 com conexão Wi-Fi
 import network
 import time
-import machine
 import gc
 import config
 
@@ -27,40 +26,10 @@ def conectar_wifi():
         print('Falha na conexão Wi-Fi.')
         return False
 
-def verificar_ota():
-    if config.GITHUB_USER == "SEU_USUARIO_GITHUB":
-        print("Aviso OTA: Atualize o GITHUB_USER no config.py com seu usuário real.")
-        return
-
-    try:
-        gc.collect() # Libera RAM antes de abrir socket HTTPS
-        import senko
-        print("Verificando atualizações no GitHub...")
-        
-        ota = senko.Senko(
-            user=config.GITHUB_USER,
-            repo=config.GITHUB_REPO,
-            branch=config.GITHUB_BRANCH,
-            files=config.ARQUIVOS_OTA
-        )
-        
-        if ota.update():
-            print("Atualização realizada! Reiniciando...")
-            time.sleep(2)
-            machine.reset()
-        else:
-            print("Sistema atualizado.")
-            
-    except Exception as e:
-        print("Erro no OTA Senko:", e)
-    finally:
-        gc.collect()
-
 # Fluxo de Inicialização
 if conectar_wifi():
-    verificar_ota()
-    print("Iniciando aplica��ão principal...")
+    print("Wi-Fi pronto. Iniciando aplicação...")
 else:
-    print("Iniciando sem Wi-Fi/OTA...")
+    print("Iniciando sem Wi-Fi...")
 
 gc.collect()

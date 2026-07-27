@@ -1,4 +1,4 @@
-# app.py - ESP8266 NodeMCU v3
+# app.py - Aplicação principal
 from umqtt.simple import MQTTClient
 from machine import Pin
 import ujson
@@ -6,10 +6,8 @@ import time
 import gc
 import config
 import machine
-import senko  # Import do atualizador OTA
-
 # --- HARDWARE ---
-# Se o seu relé for Active Low (liga em 0, desliga em 1), altere initial value para 1
+# Se o seu relé for Active Low (liga em 0, desliga em 1), altere o valor inicial
 rele = Pin(config.PIN_RELE, Pin.OUT, value=0)
 client = None
 
@@ -19,17 +17,50 @@ def obter_estado_rele():
 
 def enviar_descoberta(cliente):
     try:
-        gc.collect() # Garante RAM máxima livre antes de publicar
-        payload_json = ujson.dumps(config.CONFIG_PAYLOAD)
+        gc.collect()
+        # Envia o Discovery do Switch do Relé
+        payload_sw = ujson.dumps(config.CONFIG_PAYLOAD)
+        cliente.publish(config.TOPICO_CONFIG, payload_sw, qos=0, retain=True)
         
-        print("Enviando Discovery (Tamanho:", len(payload_json), "bytes)...")
-        cliente.publish(config.TOPICO_CONFIG, payload_json, qos=0, retain=True)
+        time.sleep_ms(200)
         
-        time.sleep(1)
-        cliente.publish(config.TOPICO_ESTADO, "OFF", qos=0, retain=True)
-        print("Discovery enviado!")
+        # Envia o Discovery do Botão de Atualização OTA
+        payload_ota = ujson.dumps(config.CONFIG_OTA_BTN_PAYLOAD)
+        cliente.publish(config.TOPICO_CONFIG_OTA_BTN, payload_ota, qos=0, retain=True)
+        
+        time.sleep_ms(200)
+        
+        # Publica o estado inicial real do relé
+        cliente.publish(config.TOPICO_ESTADO, obter_estado_rele(), qos=0, retain=True)
+        print("Discovery do HA e estado inicial enviados!")
     except Exception as e:
-        print("Erro no discovery:", e)
+        print("Erro ao enviar discovery:", e)
+
+def executar_atualizacao_ota():
+    """Executa o Senko sob demanda de forma isolada e segura em relação à RAM."""
+    print("Iniciando verificação OTA sob demanda...")
+    try:
+        gc.collect() # Libera RAM ao máximo para lidar com conexões SSL/HTTPS
+        import senko
+        
+        ota = senko.Senko(
+            user=config.GITHUB_USER,
+            repo=config.GITHUB_REPO,
+            branch=config.GITHUB_BRANCH,
+            files=config.ARQUIVOS_OTA
+        )
+        
+        if ota.update():
+            print("Atualização realizada com sucesso! Reiniciando o dispositivo...")
+            time.sleep(2)
+            machine.reset()
+        else:
+            print("Firmware já está atualizado. Nenhuma ação tomada.")
+            
+    except Exception as e:
+        print("Falha ao executar verificação OTA:", e)
+    finally:
+        gc.collect()
 
 def callback_mqtt(topic, msg):
     try:
@@ -42,33 +73,23 @@ def callback_mqtt(topic, msg):
             elif mensagem == "OFF":
                 rele.value(0)
             else:
-                return # Ignora comandos desconhecidos
+                return
             
             estado = obter_estado_rele()
             client.publish(config.TOPICO_ESTADO, estado, retain=True)
             print(f"Comando executado. Relé: {estado}")
 
         elif topico == config.TOPICO_OTA and mensagem == "CHECK":
-            print("Solicitação OTA recebida via MQTT. Verificando atualizações...")
-            OTA = senko.Senko(
-                user=config.GITHUB_USER,
-                repo=config.GITHUB_REPO,
-                branch=config.GITHUB_BRANCH,
-                files=config.ARQUIVOS_OTA
-            )
-            if OTA.update():
-                print("Atualização encontrada e instalada! Reiniciando...")
-                machine.reset()
-            else:
-                print("Firmware já está na versão mais recente.")
+            print("Comando de OTA manual recebido via MQTT!")
+            executar_atualizacao_ota()
 
     except Exception as e:
         print("Erro no callback MQTT:", e)
 
 def main():
     global client
-    print("Iniciando aplicação...")
-    time.sleep(2) # Estabilização
+    print("Iniciando aplicação principal...")
+    time.sleep(1)
     
     client = MQTTClient(
         config.CLIENT_ID, 
@@ -84,7 +105,7 @@ def main():
     while tentativas < 5:
         try:
             client.connect()
-            print("Conectado ao Broker MQTT.")
+            print("Conectado ao Broker MQTT com sucesso.")
             break
         except Exception as e:
             print(f"Falha na conexão MQTT ({tentativas+1}/5):", e)
@@ -96,12 +117,10 @@ def main():
         machine.reset()
 
     try:
-        time.sleep(1) 
-        
         # Inscreve nos tópicos de comando e acionamento OTA
         client.subscribe(config.TOPICO_COMANDO)
         client.subscribe(config.TOPICO_OTA)
-        print("Subscrito nos tópicos MQTT com sucesso.")
+        print("Inscrito nos tópicos MQTT com sucesso.")
         
         enviar_descoberta(client)
         print("ESP8266 Pronto e operacional!")
@@ -113,7 +132,7 @@ def main():
             time.sleep(0.1)
             
     except Exception as e:
-        print("Erro fatal no loop principal:", e)
+        print("Erro no loop principal:", e)
         time.sleep(3)
         machine.reset()
 
