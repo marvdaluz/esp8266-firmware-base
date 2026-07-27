@@ -10,6 +10,7 @@ class Senko:
         self.url = url
         self.branch = branch
         self.files = files if files else []
+        self.headers = {"User-Agent": "MicroPython-ESP8266-OTA"}
         
         # Define a URL base para buscar arquivos Raw no GitHub
         if not self.url:
@@ -21,7 +22,7 @@ class Senko:
         response = None
         try:
             gc.collect()
-            response = urequests.get(url)
+            response = urequests.get(url, headers=self.headers)
             if response.status_code == 200:
                 return response.text
             else:
@@ -35,56 +36,38 @@ class Senko:
                 response.close()
             gc.collect()
 
-    def _check_hash(self, filename):
-        """Verifica se há diferença entre o arquivo local e o do GitHub."""
-        # Se o arquivo local não existir na flash, considera como precisando de atualização
-        try:
-            os.stat(filename)
-        except OSError:
-            return True
-
-        github_code = self._get_file(filename)
-        if github_code is None:
-            return False
-
-        try:
-            with open(filename, "r") as f:
-                local_code = f.read()
-            return github_code != local_code
-        except Exception as e:
-            print(f"Erro ao ler arquivo local {filename}:", e)
-            return False
-
-    def fetch(self):
-        """Verifica quais arquivos precisam de atualização."""
-        changes = []
-        for file in self.files:
-            if self._check_hash(file):
-                changes.append(file)
-        return changes
-
     def update(self):
-        """Baixa e substitui os arquivos desatualizados."""
-        changes = self.fetch()
-        if not changes:
-            return False
-
-        print(f"Arquivos com atualizações pendentes: {changes}")
+        """Verifica, baixa e substitui apenas os arquivos que sofreram alteração (1 requisição por arquivo)."""
+        updated_any = False
         
-        for file in changes:
-            print(f"Atualizando {file}...")
-            new_code = self._get_file(file)
-            if new_code is not None:
+        for file in self.files:
+            print(f"Verificando {file}...")
+            github_code = self._get_file(file)
+            
+            if github_code is None:
+                print(f"Pulado {file} por erro de download.")
+                continue
+
+            # Tenta ler o arquivo local
+            local_code = ""
+            try:
+                with open(file, "r") as f:
+                    local_code = f.read()
+            except OSError:
+                # Se não existir localmente, força a gravação
+                pass
+
+            # Compara e atualiza apenas se o código mudou
+            if github_code != local_code:
+                print(f"Atualizações encontradas para {file}. Gravando na flash...")
                 try:
-                    # Sobreve o arquivo na memória Flash
                     with open(file, "w") as f:
-                        f.write(new_code)
+                        f.write(github_code)
                     print(f"{file} atualizado com sucesso!")
+                    updated_any = True
                 except Exception as e:
                     print(f"Erro ao gravar {file}:", e)
-                    return False
             else:
-                print(f"Falha ao obter código de {file}")
-                return False
+                print(f"{file} já está atualizado.")
 
-        return True
+        return updated_any

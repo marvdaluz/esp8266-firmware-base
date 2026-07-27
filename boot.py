@@ -59,7 +59,7 @@ def verificar_ota():
 # Fluxo de Inicialização
 if conectar_wifi():
     verificar_ota()
-    print("Iniciando aplicação principal...")
+    print("Iniciando aplica��ão principal...")
 else:
     print("Iniciando sem Wi-Fi/OTA...")
 
