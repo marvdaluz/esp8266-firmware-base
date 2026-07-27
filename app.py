@@ -81,7 +81,8 @@ def main():
         config.MQTT_BROKER, 
         port=config.MQTT_PORT,
         user=config.MQTT_USER, 
-        password=config.MQTT_PASS
+        password=config.MQTT_PASS,
+        keepalive=60
     )
     client.set_callback(callback_mqtt)
     
