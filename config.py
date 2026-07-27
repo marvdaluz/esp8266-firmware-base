@@ -7,7 +7,7 @@ WIFI_PASS = "27734056"
 GITHUB_USER = "marvdaluz"
 GITHUB_REPO = "esp8266-firmware-base"
 GITHUB_BRANCH = "main"
-ARQUIVOS_OTA = ["boot.py", "app.py","main.py", "config.py"]
+ARQUIVOS_OTA = ["boot.py", "app.py", "main.py", "config.py"]
 # --- CREDENCIAIS MQTT ---
 MQTT_BROKER = "10.103.1.30"
 MQTT_PORT = 1883
