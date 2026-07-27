@@ -10,11 +10,9 @@ import machine
 # Se o seu relé for Active Low (liga em 0, desliga em 1), altere o valor inicial
 rele = Pin(config.PIN_RELE, Pin.OUT, value=0)
 client = None
-
 def obter_estado_rele():
     """Retorna a string baseada no estado físico do pino."""
     return "ON" if rele.value() == 1 else "OFF"
-
 def enviar_descoberta(cliente):
     try:
         gc.collect()
@@ -35,12 +33,22 @@ def enviar_descoberta(cliente):
         print("Discovery do HA e estado inicial enviados!")
     except Exception as e:
         print("Erro ao enviar discovery:", e)
-
 def executar_atualizacao_ota():
-    """Executa o Senko sob demanda de forma isolada e segura em relação à RAM."""
+    """Executa o Senko sob demanda liberando o máximo de memória possível."""
+    global client
     print("Iniciando verificação OTA sob demanda...")
+    # 1. Desconecta temporariamente do MQTT para liberar a memória do socket/buffer
     try:
-        gc.collect() # Libera RAM ao máximo para lidar com conexões SSL/HTTPS
+        if client:
+            client.disconnect()
+            print("Cliente MQTT desconectado temporariamente para liberar RAM.")
+    except Exception:
+        pass
+    # 2. Força a limpeza completa do Garbage Collector
+    gc.collect()
+    time.sleep_ms(500)
+
+    try:
         import senko
         
         ota = senko.Senko(
@@ -56,12 +64,16 @@ def executar_atualizacao_ota():
             machine.reset()
         else:
             print("Firmware já está atualizado. Nenhuma ação tomada.")
+            # Reiniciamos o ESP mesmo se não houver atualização para reestabelecer o estado limpo
+            print("Reiniciando para restaurar conexões limpas...")
+            time.sleep(1)
+            machine.reset()
             
     except Exception as e:
         print("Falha ao executar verificação OTA:", e)
-    finally:
-        gc.collect()
-
+        print("Reiniciando devido a erro no OTA...")
+        time.sleep(2)
+        machine.reset()
 def callback_mqtt(topic, msg):
     try:
         topico = topic.decode('utf-8')
